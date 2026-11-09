@@ -1,0 +1,85 @@
+
+name: Build Personal APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Source branch (main or dev)"
+        required: true
+        default: "dev"
+        type: string
+      build_type:
+        description: "Build type"
+        required: true
+        default: "release"
+        type: choice
+        options:
+          - release
+          - debug
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      CI: "true"
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: oracle
+          java-version: "17.0.1"
+          architecture: x64
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-36" \
+            "platforms;android-37.0" \
+            "build-tools;36.0.0" \
+            "build-tools;37.0.0"
+          set +o pipefail
+          yes | sdkmanager --licenses > /dev/null
+          set -o pipefail
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+
+      - name: Build APK
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+
+          if [[ "${{ inputs.build_type }}" == "release" ]]; then
+            ./gradlew --no-daemon --stacktrace :app:assembleRelease
+          else
+            ./gradlew --no-daemon --stacktrace :app:assembleDebug
+          fi
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sesame-AG-${{ inputs.build_type }}
+          path: app/build/outputs/apk/${{ inputs.build_type }}/*.apk
+          if-no-files-found: error
+          retention-days: 30
