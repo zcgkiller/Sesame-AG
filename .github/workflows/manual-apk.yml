@@ -75,6 +75,56 @@ jobs:
           else
             ./gradlew --no-daemon --stacktrace :app:assembleDebug
           fi
+      
+      - name: Sign Release APKs
+        if: ${{ inputs.build_type == 'release' }}
+        shell: bash
+        env:
+          ANDROID_SIGNING_KEY: ${{ secrets.ANDROID_SIGNING_KEY }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          : "${ANDROID_SIGNING_KEY:?Missing signing key}"
+          : "${ANDROID_KEY_ALIAS:?Missing alias}"
+          : "${ANDROID_KEYSTORE_PASSWORD:?Missing store password}"
+          : "${ANDROID_KEY_PASSWORD:?Missing key password}"
+
+          KEYSTORE="$RUNNER_TEMP/sesame-release.jks"
+          trap 'rm -f "$KEYSTORE"' EXIT
+
+          printf '%s' "$ANDROID_SIGNING_KEY" |
+            base64 --decode > "$KEYSTORE"
+
+          APKSIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          test -x "$APKSIGNER"
+
+          mkdir -p signed-apks
+          shopt -s nullglob
+
+          apks=(app/build/outputs/apk/release/*.apk)
+          (( ${#apks[@]} > 0 )) || exit 1
+
+          for apk in "${apks[@]}"; do
+            output="signed-apks/$(basename "$apk" .apk)-signed.apk"
+
+            "$APKSIGNER" sign \
+              --ks "$KEYSTORE" \
+              --ks-type PKCS12 \
+              --ks-key-alias "$ANDROID_KEY_ALIAS" \
+              --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+              --key-pass env:ANDROID_KEY_PASSWORD \
+              --out "$output" \
+              "$apk"
+
+            "$APKSIGNER" verify \
+              --verbose \
+              --print-certs \
+              "$output"
+          done
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4
