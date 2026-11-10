@@ -1,0 +1,60 @@
+
+name: Sync Upstream Dev
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # 每天 02:17 UTC 检查上游
+    - cron: "17 2 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: upstream-dev-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout fork dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Fetch and sync upstream dev
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git remote add upstream \
+            https://github.com/Sesame-AG/Sesame-AG.git
+
+          git fetch upstream \
+            +refs/heads/dev:refs/remotes/upstream/dev
+
+          git switch dev
+
+          BEFORE=$(git rev-parse HEAD)
+          UPSTREAM=$(git rev-parse upstream/dev)
+
+          echo "Current fork dev: $BEFORE"
+          echo "Upstream dev:     $UPSTREAM"
+
+          if [[ "$BEFORE" == "$UPSTREAM" ]]; then
+            echo "Already up to date."
+            exit 0
+          fi
+
+          # Only allow fast-forward updates.
+          # Never discard personal commits.
+          git merge --ff-only upstream/dev
+
+          echo "Pushing updated dev branch..."
+          git push origin HEAD:refs/heads/dev
+
+          echo "Upstream sync completed."
