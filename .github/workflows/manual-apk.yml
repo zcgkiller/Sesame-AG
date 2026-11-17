@@ -126,10 +126,23 @@ jobs:
               "$output"
           done
 
-      - name: Upload APKs
+
+      # 上传经过个人固定证书签名的 Release APK
+      - name: Upload Signed Release APKs
+        if: ${{ inputs.build_type == 'release' }}
         uses: actions/upload-artifact@v4
         with:
-          name: Sesame-AG-${{ inputs.build_type }}
-          path: app/build/outputs/apk/${{ inputs.build_type }}/*.apk
+          name: Sesame-AG-Personal-Signed-${{ github.run_number }}
+          path: signed-apks/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      # Debug 构建单独上传
+      - name: Upload Debug APKs
+        if: ${{ inputs.build_type == 'debug' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sesame-AG-Debug-${{ github.run_number }}
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
